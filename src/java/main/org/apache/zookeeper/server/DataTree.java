@@ -1187,6 +1187,7 @@ public class DataTree {
     public void deserialize(InputArchive ia, String tag) throws IOException {
         deserializeList(longKeyMap, ia);
         nodes.clear();
+        pTrie.clear();
         String path = ia.readString("path");
         while (!path.equals("/")) {
             DataNode node = new DataNode();
@@ -1252,9 +1253,11 @@ public class DataTree {
             pwriter.print("0x" + Long.toHexString(k));
             pwriter.println(":");
             HashSet<String> tmp = ephemerals.get(k);
-            synchronized (tmp) {
-                for (String path : tmp) {
-                    pwriter.println("\t" + path);
+            if (tmp != null) {
+                synchronized (tmp) {
+                    for (String path : tmp) {
+                        pwriter.println("\t" + path);
+                    }
                 }
             }
         }
@@ -1269,8 +1272,6 @@ public class DataTree {
         root = null;
         nodes.clear();
         ephemerals.clear();
-        // dataWatches = null;
-        // childWatches = null;
     }
 
     public void setWatches(long relativeZxid, List<String> dataWatches,
@@ -1278,53 +1279,33 @@ public class DataTree {
             Watcher watcher) {
         for (String path : dataWatches) {
             DataNode node = getNode(path);
-            WatchedEvent e = null;
             if (node == null) {
-                e = new WatchedEvent(EventType.NodeDeleted,
-                        KeeperState.SyncConnected, path);
-            } else if (node.stat.getCzxid() > relativeZxid) {
-                e = new WatchedEvent(EventType.NodeCreated,
-                        KeeperState.SyncConnected, path);
+                watcher.process(new WatchedEvent(EventType.NodeDeleted,
+                            KeeperState.SyncConnected, path));
             } else if (node.stat.getMzxid() > relativeZxid) {
-                e = new WatchedEvent(EventType.NodeDataChanged,
-                        KeeperState.SyncConnected, path);
-            }
-            if (e != null) {
-                watcher.process(e);
+                watcher.process(new WatchedEvent(EventType.NodeDataChanged,
+                            KeeperState.SyncConnected, path));
             } else {
                 this.dataWatches.addWatch(path, watcher);
             }
         }
         for (String path : existWatches) {
             DataNode node = getNode(path);
-            WatchedEvent e = null;
-            if (node == null) {
-                // This is the case when the watch was registered
-            } else if (node.stat.getMzxid() > relativeZxid) {
-                e = new WatchedEvent(EventType.NodeDataChanged,
-                        KeeperState.SyncConnected, path);
-            } else {
-                e = new WatchedEvent(EventType.NodeCreated,
-                        KeeperState.SyncConnected, path);
-            }
-            if (e != null) {
-                watcher.process(e);
+            if (node != null) {
+                watcher.process(new WatchedEvent(EventType.NodeCreated,
+                            KeeperState.SyncConnected, path));
             } else {
                 this.dataWatches.addWatch(path, watcher);
             }
         }
         for (String path : childWatches) {
             DataNode node = getNode(path);
-            WatchedEvent e = null;
             if (node == null) {
-                e = new WatchedEvent(EventType.NodeDeleted,
-                        KeeperState.SyncConnected, path);
+                watcher.process(new WatchedEvent(EventType.NodeDeleted,
+                            KeeperState.SyncConnected, path));
             } else if (node.stat.getPzxid() > relativeZxid) {
-                e = new WatchedEvent(EventType.NodeChildrenChanged,
-                        KeeperState.SyncConnected, path);
-            }
-            if (e != null) {
-                watcher.process(e);
+                watcher.process(new WatchedEvent(EventType.NodeChildrenChanged,
+                            KeeperState.SyncConnected, path));
             } else {
                 this.childWatches.addWatch(path, watcher);
             }

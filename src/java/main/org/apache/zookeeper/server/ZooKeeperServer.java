@@ -247,7 +247,31 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
      *  Restore sessions and data
      */
     public void loadData() throws IOException, InterruptedException {
-        setZxid(zkDb.loadDataBase());
+        /*
+         * When a new leader starts executing Leader#lead, it 
+         * invokes this method. The database, however, has been
+         * initialized before running leader election so that
+         * the server could pick its zxid for its initial vote.
+         * It does it by invoking QuorumPeer#getLastLoggedZxid.
+         * Consequently, we don't need to initialize it once more
+         * and avoid the penalty of loading it a second time. Not 
+         * reloading it is particularly important for applications
+         * that host a large database.
+         * 
+         * The following if block checks whether the database has
+         * been initialized or not. Note that this method is
+         * invoked by at least one other method: 
+         * ZooKeeperServer#startdata.
+         *  
+         * See ZOOKEEPER-1642 for more detail.
+         */
+        if(zkDb.isInitialized()){
+            setZxid(zkDb.getDataTreeLastProcessedZxid());
+        }
+        else {
+            setZxid(zkDb.loadDataBase());
+        }
+        
         // Clean up dead sessions
         LinkedList<Long> deadSessions = new LinkedList<Long>();
         for (Long session : zkDb.getSessions()) {
@@ -260,12 +284,10 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             // XXX: Is lastProcessedZxid really the best thing to use?
             killSession(session, zkDb.getDataTreeLastProcessedZxid());
         }
-
-        // Make a clean snapshot
-        takeSnapshot();
     }
 
     public void takeSnapshot(){
+
         try {
             txnLogFactory.save(zkDb.getDataTree(), zkDb.getSessionWithTimeOuts());
         } catch (IOException e) {
@@ -597,9 +619,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                         + " with negotiated timeout " + cnxn.getSessionTimeout()
                         + " for client "
                         + cnxn.getRemoteSocketAddress());
+                cnxn.enableRecv();
             }
                 
-            cnxn.enableRecv();
         } catch (Exception e) {
             LOG.warn("Exception while establishing session, closing", e);
             cnxn.close();
@@ -650,8 +672,8 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                     incInProcess();
                 }
             } else {
-                LOG.warn("Dropping packet at server of type " + si.type);
-                // if invalid packet drop the packet.
+                LOG.warn("Received packet at server of unknown type " + si.type);
+                new UnimplementedRequestProcessor().processRequest(si);
             }
         } catch (MissingSessionException e) {
             if (LOG.isDebugEnabled()) {
@@ -665,7 +687,14 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     public static int getSnapCount() {
         String sc = System.getProperty("zookeeper.snapCount");
         try {
-            return Integer.parseInt(sc);
+            int snapCount = Integer.parseInt(sc);
+
+            // snapCount must be 2 or more. See org.apache.zookeeper.server.SyncRequestProcessor
+            if( snapCount < 2 ) {
+                LOG.warn("SnapCount should be 2 or more. Now, snapCount is reset to 2");
+                snapCount = 2;
+            }
+            return snapCount;
         } catch (Exception e) {
             return 100000;
         }

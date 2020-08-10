@@ -249,7 +249,8 @@ public class NettyServerCnxnFactory extends ServerCnxnFactory {
         bootstrap.setOption("reuseAddress", true);
         // child channels
         bootstrap.setOption("child.tcpNoDelay", true);
-        bootstrap.setOption("child.soLinger", 2);
+        /* set socket linger to off, so that socket close does not block */
+        bootstrap.setOption("child.soLinger", -1);
 
         bootstrap.getPipeline().addLast("servercnxnfactory", channelHandler);
     }
@@ -260,20 +261,22 @@ public class NettyServerCnxnFactory extends ServerCnxnFactory {
             LOG.debug("closeAll()");
         }
 
+        NettyServerCnxn[] allCnxns = null;
         synchronized (cnxns) {
-            // got to clear all the connections that we have in the selector
-            for (NettyServerCnxn cnxn : cnxns.toArray(new NettyServerCnxn[cnxns.size()])) {
-                try {
-                    cnxn.close();
-                } catch (Exception e) {
-                    LOG.warn("Ignoring exception closing cnxn sessionid 0x"
-                            + Long.toHexString(cnxn.getSessionId()), e);
-                }
+            allCnxns = cnxns.toArray(new NettyServerCnxn[cnxns.size()]);
+        }
+        // got to clear all the connections that we have in the selector
+        for (NettyServerCnxn cnxn : allCnxns) {
+            try {
+                cnxn.close();
+            } catch (Exception e) {
+                LOG.warn("Ignoring exception closing cnxn sessionid 0x"
+                                + Long.toHexString(cnxn.getSessionId()), e);
             }
         }
         if (LOG.isDebugEnabled()) {
-            LOG.debug("allChannels size:" + allChannels.size()
-                    + " cnxns size:" + cnxns.size());
+            LOG.debug("allChannels size:" + allChannels.size() + " cnxns size:"
+                    + allCnxns.length);
         }
     }
 
@@ -282,17 +285,18 @@ public class NettyServerCnxnFactory extends ServerCnxnFactory {
         if (LOG.isDebugEnabled()) {
             LOG.debug("closeSession sessionid:0x" + sessionId);
         }
-
+        NettyServerCnxn[] allCnxns = null;
         synchronized (cnxns) {
-            for (NettyServerCnxn cnxn : cnxns.toArray(new NettyServerCnxn[cnxns.size()])) {
-                if (cnxn.getSessionId() == sessionId) {
-                    try {
-                        cnxn.close();
-                    } catch (Exception e) {
-                        LOG.warn("exception during session close", e);
-                    }
-                    break;
+            allCnxns = cnxns.toArray(new NettyServerCnxn[cnxns.size()]);
+        }
+        for (NettyServerCnxn cnxn : allCnxns) {
+            if (cnxn.getSessionId() == sessionId) {
+                try {
+                    cnxn.close();
+                } catch (Exception e) {
+                    LOG.warn("exception during session close", e);
                 }
+                break;
             }
         }
     }

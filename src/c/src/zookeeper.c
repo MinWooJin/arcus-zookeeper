@@ -1706,18 +1706,19 @@ int zookeeper_interest(zhandle_t *zh, int *fd, int *interest,
                     -recv_to));
 
         }
-
         // We only allow 1/3 of our timeout time to expire before sending
         // a PING
         if (zh->state==ZOO_CONNECTED_STATE) {
             send_to = zh->recv_timeout/3 - idle_send;
-            if (send_to <= 0 && zh->sent_requests.head==0) {
-//                LOG_DEBUG(("Sending PING to %s (exceeded idle by %dms)",
-//                                format_current_endpoint_info(zh),-send_to));
-                int rc=send_ping(zh);
-                if (rc < 0){
-                    LOG_ERROR(("failed to send PING request (zk retcode=%d)",rc));
-                    return api_epilog(zh,rc);
+            if (send_to <= 0) {
+                if (zh->sent_requests.head==0) {
+//                    LOG_DEBUG(("Sending PING to %s (exceeded idle by %dms)",
+//                                    format_current_endpoint_info(zh),-send_to));
+                    int rc=send_ping(zh);
+                    if (rc < 0){
+                        LOG_ERROR(("failed to send PING request (zk retcode=%d)",rc));
+                        return api_epilog(zh,rc);
+                    }
                 }
                 send_to = zh->recv_timeout/3;
             }
@@ -2040,7 +2041,7 @@ static int deserialize_multi(int xid, completion_list_t *cptr, struct iarchive *
 
         deserialize_response(entry->c.type, xid, mhdr.type == -1, mhdr.err, entry, ia);
         deserialize_MultiHeader(ia, "multiheader", &mhdr);
-        //While deserializing the response we must destroy completion entry for each operation in
+        //While deserializing the response we must destroy completion entry for each operation in 
         //the zoo_multi transaction. Otherwise this results in memory leak when client invokes zoo_multi
         //operation.
         destroy_completion_entry(entry);
