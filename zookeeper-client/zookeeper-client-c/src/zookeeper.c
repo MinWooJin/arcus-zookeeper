@@ -2270,8 +2270,10 @@ int zookeeper_interest(zhandle_t *zh, socket_t *fd, int *interest,
     int rc = 0;
     struct timeval now;
 
+#if 0
     struct sockaddr_storage *old_addrs;
     char *old_hostname;
+#endif
 
 #ifdef SOCK_CLOEXEC_ENABLED
     sock_flags = SOCK_STREAM | SOCK_CLOEXEC;
@@ -2292,6 +2294,7 @@ int zookeeper_interest(zhandle_t *zh, socket_t *fd, int *interest,
             LOG_WARN(LOGCALLBACK(zh), "Exceeded deadline by %dms", time_left);
     }
 
+#if 0
     /* Claim the new ensemble list if it exists.
      * See zookeeper_change_ensemble().
      */
@@ -2320,6 +2323,7 @@ int zookeeper_interest(zhandle_t *zh, socket_t *fd, int *interest,
         free(old_hostname);
         free(old_addrs);
     }
+#endif
 
     api_prolog(zh);
 
@@ -2415,7 +2419,7 @@ int zookeeper_interest(zhandle_t *zh, socket_t *fd, int *interest,
         /* Use a short connect timeout so we can try connecting to ZooKeeper
          * servers quickly.
          */
-        int conn_to = zh->recv_timeout/(3*zh->addrs_count);
+        int conn_to = zh->recv_timeout/(3*zh->addrs.count);
 
         if (zh->state == ZOO_CONNECTED_STATE)
             recv_to = recv_to - idle_recv;
@@ -5221,10 +5225,10 @@ int zookeeper_get_ensemble_string(zhandle_t *zh, char *dst, int size)
     zoo_lock_new_addrs(zh);
 
     rc = ZOK;
-    for (i = 0; i < zh->addrs_count; i++) {
+    for (i = 0; i < zh->addrs.count; i++) {
         int rem, min;
 
-        ep = &zh->addrs[i];
+        ep = &zh->addrs.data[i];
         /* See format_endpoint_info */
 #if defined(AF_INET6)
         if(ep->ss_family==AF_INET6){
@@ -5261,6 +5265,7 @@ int zookeeper_get_ensemble_string(zhandle_t *zh, char *dst, int size)
 
 int zookeeper_change_ensemble(zhandle_t *zh, const char *hostname)
 {
+#if 0
 #if defined(__CYGWIN__)
 #error "Not implemented"
 #endif
@@ -5430,4 +5435,6 @@ fail:
     if (hostname_copy)
         free(hostname_copy);
     return rc;
+#endif
+    return ZOK;
 }
